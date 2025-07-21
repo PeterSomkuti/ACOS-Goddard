@@ -1,6 +1,6 @@
---- make.inc.example	2025-07-14 19:24:33.424071628 +0000
-+++ make.inc	2025-07-18 17:49:13.619575983 +0000
-@@ -56,16 +56,9 @@
+--- make.inc.example	2025-07-21 14:46:08.151074609 +0000
++++ make.inc	2025-07-21 15:39:53.235456513 +0000
+@@ -56,16 +56,8 @@
 
  else
 
@@ -14,7 +14,6 @@
 -
      # OpenBLAS
 -    LINKS        += ${HOME}/opt/openblas/lib/libopenblas.a
-+    LINKS        += /lib64/liblapack.so.3
-+    LINKS        += /lib64/libblas.so.3
-+
++    LINKS        += /lib64/libopenblas.so.0
  endif
+
