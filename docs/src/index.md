@@ -23,7 +23,10 @@ julia --project=./
 
 And from here, let Julia install all required packages:
 ``` julia
-using Pkg; Pkg.resolve(); Pkg.instantiate();
+using Pkg;
+Pkg.add(path="https://www.github.com/US-GHG-Center/RetrievalToolbox.jl");
+Pkg.resolve();
+Pkg.instantiate();
 ```
 
 This should ideally install the needed modules to run the example provided here.
@@ -50,7 +53,7 @@ Further, the aerosol optical properties as well as some other additional data (s
 ``` bash
 # (assuming you are still in `example_data`)
 wget https://github.com/nasa/RtRetrievalFramework/raw/refs/heads/master/input/common/input/l2_aerosol_combined.h5
-wget https://github.com/nasa/RtRetrievalFramework/raw/refs/heads/master/input/common/input/l2_oco_static_input.h5
+wget https://github.com/nasa/RtRetrievalFramework/raw/refs/heads/master/input/oco/input/l2_oco_static_input.h5
 ```
 
 Note that the location of these two files is *hard-coded* inside our application (`./example_data/...`), so if you want to replace these files or their location, you have to manually make the appropriate changes inside the `*.jl` files.
