@@ -64,7 +64,7 @@ function main()
 
     # Parse the command line arguments into a dictionary
     args = parse_commandline()
-    @info args
+
     # Check if we have a sounding ID list AND a single sounding ID
     if !isempty(args["sounding_id"]) & !isnothing(args["sounding_id_list"])
         @error "Cannot have both `sounding_id` and `sounding_id_list`!"
@@ -74,7 +74,7 @@ function main()
         exit(1)
     end
 
-    if !isnothing(args["sounding_id"])
+    if !isempty(args["sounding_id"])
         sounding_id_list = args["sounding_id"] # these are already integers
     else
         # Parse the sounding ID list
