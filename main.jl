@@ -37,6 +37,18 @@ include("collect_results.jl")
 logger = ConsoleLogger(stderr, Logging.Info);
 global_logger(logger);
 
+"""
+Splits a vector into near-equal chunks. If the vector is shorter than the number of
+workers, then empty sub-lists will be returned.
+"""
+function distribute_work(arr, n_workers = nworkers())
+
+    chunk_size = div(length(arr), n_workers)
+    remainder = length(arr) % n_workers
+
+    return [arr[i*chunk_size + 1 + min(i, remainder):(i+1)*chunk_size + min(i+1, remainder)]
+            for i in 0:n_workers-1]
+end
 
 #=
     Global variables
@@ -51,15 +63,14 @@ my_type = Float64
 include("args.jl")
 
 
-function main(barrier_channel)
+function main(barrier_channel, sync_channel, ARGS_in)
 
     #=
         Prepare the paths that contain the input data
     =#
 
     # Parse the command line arguments into a dictionary
-
-    args = parse_commandline()
+    args = parse_commandline(ARGS_in)
 
     # Check if we have a sounding ID list AND a single sounding ID
     if !isempty(args["sounding_id"]) & !isnothing(args["sounding_id_list"])
@@ -78,6 +89,9 @@ function main(barrier_channel)
         # This needs to be parsed into integers
         sounding_id_list = parse.(Ref(Int), sounding_id_list_txt)
     end
+
+    # Each worker grabs its own share:
+    sounding_id_list = distribute_work(sounding_id_list)[myid()]
 
     @info "ACOS-Goddard will process N=$(length(sounding_id_list)) scenes."
 
@@ -103,37 +117,6 @@ function main(barrier_channel)
         of the algorithm, hence they can be loaded once into memory *before* the sounding
         ID loop.
     =#
-
-    # For the OCO-type solar model
-    @info "Reading in solar model from $(args["solar_model"]) .. "
-
-    if args["solar_model"][end-2:end] == ".h5"
-        # Use the ACOS solar model
-        solar_models = Dict(
-                spec => RE.OCOHDFSolarModel(
-                # Path to the solar model file
-                args["solar_model"],
-                # "spec" referring to OCO-HDF solar model band index
-                spec,
-                spectral_unit=:Wavelength
-            ) for spec in spec_array
-        )
-
-    elseif args["solar_model"][end-2:end] == ".nc"
-        # Use the TSIS model
-        solar_models = Dict(
-            spec => RE.TSISSolarModel(
-                args["solar_model"],
-                spectral_unit=:Wavelength
-            ) for spec in spec_array
-        )
-
-        for (spec, sm) in solar_models
-            # In-place conversion of solar model units
-            RE.convert_solar_model_to_photons!(sm)
-        end
-    end
-    @info "... done!"
 
     # Read in spectroscopy, depending on the window configuration. We
     # keep them in a Dictionary that are accessed via a simple string
@@ -175,7 +158,8 @@ function main(barrier_channel)
             abscos["O2"] = RE.load_ABSCO_spectroscopy(
                 # Pass the path to the ABSCO file
                 args["o2_spec"],
-                spectral_unit=:Wavelength
+                spectral_unit=:Wavelength,
+                distributed=true
             )
             @info "... done!"
 
@@ -194,7 +178,8 @@ function main(barrier_channel)
             abscos["CO2"] = RE.load_ABSCO_spectroscopy(
                 # Pass the path to the ABSCO file
                 args["co2_spec"],
-                spectral_unit=:Wavelength
+                spectral_unit=:Wavelength,
+                distributed=true
             )
             @info "... done!"
 
@@ -216,7 +201,8 @@ function main(barrier_channel)
             abscos["H2O"] = RE.load_ABSCO_spectroscopy(
                 # Pass the path to the ABSCO file
                 args["h2o_spec"],
-                spectral_unit=:Wavelength
+                spectral_unit=:Wavelength,
+                distributed=true
             )
             @info "... done!"
         end
@@ -229,12 +215,23 @@ function main(barrier_channel)
     else
         # Other workers wait their turn and recieve them
         abscos = take!(absco_channel)
-        println("I took ABSCO from channel")
+        println(".. received ABSCO dictonary!")
+        # And put it back for the next one to receive..
         put!(absco_channel, abscos)
-        println("I gave back the ABSCO into the channel")
 
     end # End myid() == 1
 
+    # Let all workers catch up
+    if myid() > 1
+        put!(sync_channel, myid())
+    else
+        slist = Int[]
+        for id in 2:nworkers() + 1
+            push!(slist, take!(sync_channel))
+        end
+    end
+
+    # Distributed:
     # From here on, ALL processes have a valid reference to ABSCO, but thanks to the
     # SharedArray, the coefficient arrays only exist once in memory.
 
@@ -266,6 +263,37 @@ function main(barrier_channel)
 
         @info "... done!"
     end
+
+
+    @info "Reading in solar model from $(args["solar_model"]) .. "
+
+    if args["solar_model"][end-2:end] == ".h5"
+        # Use the ACOS solar model
+        solar_models = Dict(
+                spec => RE.OCOHDFSolarModel(
+                # Path to the solar model file
+                args["solar_model"],
+                # "spec" referring to OCO-HDF solar model band index
+                spec,
+                spectral_unit=:Wavelength
+            ) for spec in spec_array
+        )
+
+    elseif args["solar_model"][end-2:end] == ".nc"
+        # Use the TSIS model
+        solar_models = Dict(
+            spec => RE.TSISSolarModel(
+                args["solar_model"],
+                spectral_unit=:Wavelength
+            ) for spec in spec_array
+        )
+
+        for (spec, sm) in solar_models
+            # In-place conversion of solar model units
+            RE.convert_solar_model_to_photons!(sm)
+        end
+    end
+    @info "... done!"
 
 
     #=
@@ -352,6 +380,10 @@ function main(barrier_channel)
     # cease to exist while others might still be running..
     @sync begin
     for sounding_id in sounding_id_list
+
+        if (nworkers() > 1) & (myid() == 1)
+            continue
+        end
 
         @info "##################################"
         @info "RETRIEVING $(sounding_id)"
@@ -549,9 +581,7 @@ function main(barrier_channel)
             end
         end
         # Finished populating the list of atmospheric elements!
-        @info "Atmospheric elements: $(atm_elements)"
-
-
+        #@info "Atmospheric elements: $(atm_elements)"
 
         #@info "Creating state vector ..."
         # Create a state vector with a helper function.
@@ -794,7 +824,7 @@ function main(barrier_channel)
         #=
             Process the scene
         =#
-
+        if myid() > 1 # Do not let root process..
         @time solver, fm_kwargs = process_snid(
             spectral_windows,
             scene_inputs,
@@ -809,7 +839,7 @@ function main(barrier_channel)
             high_options=high_options,
             nus_dict=nus_dict,
             )
-
+        end
         # Return buffer, solver and forward model arguments for single-ID retrieval
         if (args["max_iterations"] == 0) & (length(sounding_id_list) == 1)
             return buf, solver, fm_kwargs

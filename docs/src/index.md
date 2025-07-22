@@ -65,13 +65,13 @@ As of now, RetrievalToolbox supports spectroscopy in the ABSCO format only. To u
 
 ## Running Examples
 
-Running the provided example retrieval is done as follows, assuming that `XRTM_PATH` is correctly set and the needed auxiliary files are downloaded and placed in the correct directories:
+Running the provided example retrieval is done as follows, assuming that `XRTM_PATH` is correctly set and the needed auxiliary files are downloaded and placed in the correct directories. It is important that the `--project=./` argument is supplied, otherwise the Julia session has no knowledge of the additional packages needed by this application!
 
 ``` bash
-XRTM_PROGRESS=1 julia ./from_repl.jl
+XRTM_PROGRESS=1 julia --project=/. ./from_repl.jl
 ```
 
-or from within Julia
+or from within Julia, when started with `--project=./`
 ``` julia
 include("from_repl.jl")
 ```
@@ -81,7 +81,7 @@ The `from_repl.jl` script includes some reasonable default settings to run the p
 Note that RetrievalToolbox supports multi-threading for the monochromatic RT calculations, and the number of threads that can be utilized is determined by the `JULIA_NUM_THREADS` environment variable. So to speed up the demo retrieval, use
 
 ``` bash
-XRTM_PROGRESS=1 JULIA_NUM_THREADS=3 julia ./from_repl.jl
+XRTM_PROGRESS=1 JULIA_NUM_THREADS=3 julia --project=./ ./from_repl.jl
 ```
 
 For this particular set-up, choosing `3` threads tends to provide the best benefit, using more threads does not achieve notable speed-up in our experience. The high-accuracy approximation technique (LSI) cannot yet benefit from multi-threading. For parallel processing of multiple **soundings** via, e.g., GNU Parallel, users might want to benchmark which combination of parallel instances vs. the number of threads to use. The memory footprint also changes when using more than one thread.
@@ -105,7 +105,7 @@ which will start the Jupyter server and open a web browser. Alternatively, users
 Instead of running `from_repl.jl`, users can of course tailor the inputs to the retrieval algorithm. Below is an example of how to call `run.jl`, which is the main application to be used. Like before, this assumes that the required auxiliary data is downloaded and placed into the correct folders, and that `XRTM_PATH` is correctly set. The below example runs a single retrieval with the sounding ID `2021030111564431`. To process several soundings, users can invoke the `--sounding_id_list` command line argument, explained further below.
 
 ``` bash
-XRTM_PROGRESS=1 JULIA_NUM_THREADS=3 julia ./run.jl \
+XRTM_PROGRESS=1 JULIA_NUM_THREADS=3 julia --project=./ ./run.jl \
         --solar_model ./example_data/l2_solar_model.h5 \
         --L1b ./example_data/2021030111564431_inputs.h5 \
         --L2Met ./example_data/2021030111564431_inputs.h5 \
@@ -183,7 +183,7 @@ Each command line argument will be explained below.
 The application supports rudimentary parallel processing via Julia's built-in functions for distributed computing. From a user perspective, the only required change is to execute the script with multiple processes (or workers) with the `-p` flag, and ACOS Goddard will take care of the rest. In our example shipped in this repository, one would run 3 parallel processes to process all 3 IDs in the `sounding_id_list.txt` files at the same time:
 
 ``` bash
-XRTM_PROGRESS=1 JULIA_NUM_THREADS=1 julia -p 3 ./run.jl \
+XRTM_PROGRESS=1 JULIA_NUM_THREADS=1 julia --project=./ -p 3 ./run.jl \
         --solar_model ./example_data/l2_solar_model.h5 \
         --L1b ./example_data/2021030111564431_inputs.h5 \
         --L2Met ./example_data/2021030111564431_inputs.h5 \
@@ -213,3 +213,4 @@ Note that the ACOS Goddard application is not simply spawned three times - we ar
 For a given list of sounding IDs, either ingested via the `--sounding_id_list` argument, or by providing more than one ID through `--sounding_id`, the application chops up the list into equal lengths (if possible) and lets each process run through its own sub-list. Note that this is a static assignment for now, and due to the simple nature of this solution, there is no re-balancing of the workload **after** the application is called. So if one worker happens to be given a list of sounding IDs which all have a bad quality flag, that worker process will simply do nothing until all other processes are finished with their respective batch of retrievals. Also note that Julia's `SharedArray` functionality **only works on a single-node**, so running this set-up on a cluster where workers are spawned on different nodes will **not work**.
 
 Users who need a more sophisticated multi-processing set-ups need to implement their own solution.
+

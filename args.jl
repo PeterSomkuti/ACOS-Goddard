@@ -1,4 +1,4 @@
-function parse_commandline()
+function parse_commandline(ARGS_input)
 
     s = ArgParseSettings()
     @add_arg_table! s begin
@@ -119,6 +119,6 @@ function parse_commandline()
             required=true
     end
 
-    return parse_args(s)
+    return parse_args(ARGS_input, s)
 
 end
