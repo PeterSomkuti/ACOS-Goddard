@@ -127,8 +127,7 @@ XRTM_PROGRESS=1 JULIA_NUM_THREADS=3 julia ./run.jl \
         --Nhigh 16 \
         --dsigma_scale 2.0 \
         --gamma 50.0 \
-        --max_iterations 10 \
-
+        --max_iterations 10
 ```
 
 Each command line argument will be explained below.
@@ -181,5 +180,36 @@ Each command line argument will be explained below.
 
 ## Performance aspects, batch processing and scaling
 
+The application supports rudimentary parallel processing via Julia's built-in functions for distributed computing. From a user perspective, the only required change is to execute the script with multiple processes (or workers) with the `-p` flag, and ACOS Goddard will take care of the rest. In our example shipped in this repository, one would run 3 parallel processes to process all 3 IDs in the `sounding_id_list.txt` files at the same time:
 
+``` bash
+XRTM_PROGRESS=1 JULIA_NUM_THREADS=1 julia -p 3 ./run.jl \
+        --solar_model ./example_data/l2_solar_model.h5 \
+        --L1b ./example_data/2021030111564431_inputs.h5 \
+        --L2Met ./example_data/2021030111564431_inputs.h5 \
+        --L2CPr ./example_data/2021030111564431_inputs.h5 \
+        --output 2021030111564431.h5 \
+        --o2_spec ./example_data/o2_v52.hdf \
+        --o2_scale 1.0048 \
+        --co2_spec ./example_data/co2_v52.hdf \
+        --co2_scale_weak 0.994 \
+        --co2_scale_strong 0.998 \
+        --h2o_spec ./example_data/h2o_v52.hdf \
+        --sounding_id_list sounding_id_list.txt \
+        --spec 1,2,3 \
+        --polarized true \
+        --Lambertian false \
+        --aerosols true \
+        --retrieve_aerosols true \
+        --LSI true \
+        --Nhigh 16 \
+        --dsigma_scale 2.0 \
+        --gamma 50.0 \
+        --max_iterations 10
+```
 
+Note that the ACOS Goddard application is not simply spawned three times - we are making use of the `SharedArray` type for distributed computing in Julia such that the big spectroscopy tables are only loaded into memory **once**, and all worker processes access the same data. Users are encouraged to try out various combinations of numbers of processes (`-p`) and numbers of threads (`JULIA_NUM_THREADS`) for optimal throughput, and results are likely to differ for different computing systems.
+
+For a given list of sounding IDs, either ingested via the `--sounding_id_list` argument, or by providing more than one ID through `--sounding_id`, the application chops up the list into equal lengths (if possible) and lets each process run through its own sub-list. Note that this is a static assignment for now, and due to the simple nature of this solution, there is no re-balancing of the workload **after** the application is called. So if one worker happens to be given a list of sounding IDs which all have a bad quality flag, that worker process will simply do nothing until all other processes are finished with their respective batch of retrievals. Also note that Julia's `SharedArray` functionality **only works on a single-node**, so running this set-up on a cluster where workers are spawned on different nodes will **not work**.
+
+Users who need a more sophisticated multi-processing set-ups need to implement their own solution.
