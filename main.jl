@@ -1,9 +1,3 @@
-#using Pkg
-#using Revise
-#Pkg.develop(path="../RetrievalToolbox.jl")
-#@info "Using GHGC version"
-#Pkg.develop(path="/Users/psomkuti/Work/ghgc/RetrievalToolbox.jl")
-
 # The retrieval toolkit - every function you use with a RE.xxx is from there
 # Any other function is either from a third-party module or from this repo.
 
@@ -12,6 +6,7 @@ const RE = RetrievalToolbox
 
 using ArgParse
 using Dates
+using Distributed # needed for batch processing with shared memory
 using DocStringExtensions
 using HDF5
 using Interpolations
@@ -56,13 +51,14 @@ my_type = Float64
 include("args.jl")
 
 
-function main()
+function main(barrier_channel)
 
     #=
         Prepare the paths that contain the input data
     =#
 
     # Parse the command line arguments into a dictionary
+
     args = parse_commandline()
 
     # Check if we have a sounding ID list AND a single sounding ID
@@ -139,63 +135,108 @@ function main()
     end
     @info "... done!"
 
-
     # Read in spectroscopy, depending on the window configuration. We
     # keep them in a Dictionary that are accessed via a simple string
     # so that e.g. `abscos["CO2"]` gets you the CO2 absco.
-    abscos = Dict{String, RE.AbstractSpectroscopy}()
 
-    # If we use the O2 A-band, we need O2 at least
-    if 1 in spec_array
-        @info "Reading in O2 spectroscopy ..."
-        abscos["O2"] = RE.load_ABSCO_spectroscopy(
-            # Pass the path to the ABSCO file
-            args["o2_spec"],
-            spectral_unit=:Wavelength
-        )
-        @info "... done!"
+    #=
+        This is the ONLY part in the code, for now, in which we are making use of Julia's
+        distributed computing function. The ABSCO tables are a large chunk of the total
+        memory usage in this application. We thus let only the root process read them into
+        memory, and then share it to all workers. This is possible, because the
+        ABSCOSpectroscopy4D objects all accept SharedArrays for the coefficient array.
+        This way, we do not duplicate the array in memory, but ALL workers use the same
+        memory space.
+    =#
 
-        # Apply a user-defined spectroscopy scaling factor. This can be done to the
-        # entire spectroscopic table since oxygen is only present in the A-band
-        # anyway.
-        @info "Scaling O2 cross sections by $(args["o2_scale"])"
-        abscos["O2"].cross_section[:] .*= args["o2_scale"]
+    local absco_channel
 
+    if myid() == 1
+        # Root creates the absco coordination channel
+        absco_channel = RemoteChannel(() ->
+            Channel{Dict{String, RE.AbstractSpectroscopy}}(1))
+        # Signal to all workers that channel is ready
+        put!(barrier_channel, absco_channel)
+    else
+        # Worker takes it from the channel
+        absco_channel = take!(barrier_channel)
+        # Puts it back for the next one to grab it
+        put!(barrier_channel, absco_channel)
     end
 
-    # If we use either of the two CO2 bands, we need H2O and CO2
-    if (2 in spec_array) | (3 in spec_array)
-        @info "Reading in CO2 spectroscopy ..."
-        abscos["CO2"] = RE.load_ABSCO_spectroscopy(
-            # Pass the path to the ABSCO file
-            args["co2_spec"],
-            spectral_unit=:Wavelength
-        )
-        @info "... done!"
 
-        # Apply a user-defined scale factor for CO2 spectroscopy in the weak band
-        @info "Scaling CO2 cross sections for weak CO2 by " *
-            "$(args["co2_scale_weak"])"
-        idx_weak = findall(abscos["CO2"].ww * abscos["CO2"].ww_unit .< 2.0u"µm")
-        abscos["CO2"].cross_section[idx_weak,:,:,:] .*= args["co2_scale_weak"]
+    if myid() == 1
+        # Root channel creates the ABSCO dict, and loads the data..
+        abscos = Dict{String, RE.AbstractSpectroscopy}()
+
+        # If we use the O2 A-band, we need O2 at least
+        if 1 in spec_array
+            @info "Reading in O2 spectroscopy ..."
+            abscos["O2"] = RE.load_ABSCO_spectroscopy(
+                # Pass the path to the ABSCO file
+                args["o2_spec"],
+                spectral_unit=:Wavelength
+            )
+            @info "... done!"
+
+            # Apply a user-defined spectroscopy scaling factor. This can be done to the
+            # entire spectroscopic table since oxygen is only present in the A-band
+            # anyway.
+            # Note: scaling should only be done by ONE worker in case of distributed
+            @info "Scaling O2 cross sections by $(args["o2_scale"])"
+            abscos["O2"].cross_section[:] .*= args["o2_scale"]
+
+        end
+
+        # If we use either of the two CO2 bands, we need H2O and CO2
+        if (2 in spec_array) | (3 in spec_array)
+            @info "Reading in CO2 spectroscopy ..."
+            abscos["CO2"] = RE.load_ABSCO_spectroscopy(
+                # Pass the path to the ABSCO file
+                args["co2_spec"],
+                spectral_unit=:Wavelength
+            )
+            @info "... done!"
+
+            # Apply a user-defined scale factor for CO2 spectroscopy in the weak band
+            @info "Scaling CO2 cross sections for weak CO2 by " *
+                "$(args["co2_scale_weak"])"
+            idx_weak = findall(abscos["CO2"].ww * abscos["CO2"].ww_unit .< 2.0u"µm")
+            abscos["CO2"].cross_section[idx_weak,:,:,:] .*= args["co2_scale_weak"]
 
 
-        # Apply a user-defined scale factor for CO2 spectroscopy in the strong band
-        @info "Scaling CO2 cross sections for strong CO2 by " *
-            "$(args["co2_scale_strong"])"
-        idx_strong = findall(abscos["CO2"].ww * abscos["CO2"].ww_unit .> 2.0u"µm")
-        abscos["CO2"].cross_section[idx_strong,:,:,:] .*= args["co2_scale_strong"]
+            # Apply a user-defined scale factor for CO2 spectroscopy in the strong band
+            @info "Scaling CO2 cross sections for strong CO2 by " *
+                "$(args["co2_scale_strong"])"
+            idx_strong = findall(abscos["CO2"].ww * abscos["CO2"].ww_unit .> 2.0u"µm")
+            abscos["CO2"].cross_section[idx_strong,:,:,:] .*= args["co2_scale_strong"]
 
 
-        @info "Reading in H2O spectroscopy ..."
-        abscos["H2O"] = RE.load_ABSCO_spectroscopy(
-            # Pass the path to the ABSCO file
-            args["h2o_spec"],
-            spectral_unit=:Wavelength
-        )
-        @info "... done!"
-    end
+            @info "Reading in H2O spectroscopy ..."
+            abscos["H2O"] = RE.load_ABSCO_spectroscopy(
+                # Pass the path to the ABSCO file
+                args["h2o_spec"],
+                spectral_unit=:Wavelength
+            )
+            @info "... done!"
+        end
 
+        if nworkers() > 1 # In case we are running with more than one process
+            # Put the ABSCO dict into the remote channel
+            println("Root puts ABSCO into channel..")
+            put!(absco_channel, abscos)
+        end
+    else
+        # Other workers wait their turn and recieve them
+        abscos = take!(absco_channel)
+        println("I took ABSCO from channel")
+        put!(absco_channel, abscos)
+        println("I gave back the ABSCO into the channel")
+
+    end # End myid() == 1
+
+    # From here on, ALL processes have a valid reference to ABSCO, but thanks to the
+    # SharedArray, the coefficient arrays only exist once in memory.
 
     #=
         For every ABSCO object, we create a new gas object. Same as the ABSCOs,
@@ -306,7 +347,10 @@ function main()
 
     close(h5_oco_static)
 
-    # Big sounding ID loop!
+    # Big sounding ID loop! Note this is wrapped in a @sync as we need all workers to
+    # finish at the same time. Otherwise the sharedarray from the root process would
+    # cease to exist while others might still be running..
+    @sync begin
     for sounding_id in sounding_id_list
 
         @info "##################################"
@@ -776,7 +820,7 @@ function main()
         if !isnothing(this_result)
 
             # Output file name:
-            outfname = joinpath(args["output"], string(sounding_id) * ".h5")
+            outfname = joinpath(args["output"], string(sounding_id) * "_$(myid()).h5")
 
             results = Dict()
             results[sounding_id] = this_result
@@ -805,6 +849,7 @@ function main()
         end
 
     end # End sounding ID loop
+    end # End @sync
 
 end
 
