@@ -381,9 +381,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
     @sync begin
     for sounding_id in sounding_id_list
 
-        if (nworkers() > 1) & (myid() == 1)
-            continue
-        end
+        GC.gc() # Free up memory, maybe useful for multi-processing
 
         @info "##################################"
         @info "RETRIEVING $(sounding_id)"
@@ -850,7 +848,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
         if !isnothing(this_result)
 
             # Output file name:
-            outfname = joinpath(args["output"], string(sounding_id) * "_$(myid()).h5")
+            outfname = joinpath(args["output"], string(sounding_id) * ".h5")
 
             results = Dict()
             results[sounding_id] = this_result
