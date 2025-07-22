@@ -10,6 +10,8 @@ running Julia session.
 
 =#
 
+using Distributed
+
 my_args = [
     #"--solar_model", "./data/hybrid_reference_spectrum_p005nm_resolution_c2022-11-30_with_unc.nc",
     "--solar_model", "./example_data/l2_solar_model.h5", # Path to solar model file
@@ -36,12 +38,15 @@ my_args = [
     "--Nhigh", "16", # what number of (half-)streams to use with LSI?
     "--gamma", "500.0", # LM-gamma initial value
     "--dsigma_scale", "2.0", # scale factor for convergence check (higher means faster convergence)
-    "--max_iterations", "1", # number of iterations before the retrieval is forced to stop
+    "--max_iterations", "10", # number of iterations before the retrieval is forced to stop
 ]
 
-empty!(ARGS)
-push!(ARGS, my_args...)
+# For distributed, we need to do this:
+barrier_channel = RemoteChannel(() -> Channel{RemoteChannel}(1))
 
+@everywhere my_args = $my_args
+@everywhere empty!(ARGS)
+@everywhere push!(ARGS, my_args...)
 
-include("main.jl")
-main()
+@everywhere include("main.jl")
+@everywhere main($barrier_channel)

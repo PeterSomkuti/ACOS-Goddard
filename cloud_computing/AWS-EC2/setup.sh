@@ -18,11 +18,13 @@ fi
 # Step 1, install all required packages via yum
 
 echo "### Installing required software via yum"
-sudo yum -y install git gfortran g++ openblas-openmp patch
+
+sudo yum -y install git gfortran g++ openblas-devel patch parallel
 
 # Step 2, download Julia via juliaup (unless it exists)
 
 echo "### Installing Julia via juliaup"
+
 juliaup -V
 if [ $? -ne 0 ]; then
     echo "JuliaUp not found - installing"
@@ -54,9 +56,16 @@ fi
 
 # Step 4, instantiate all needed Julia packages
 cd ${ACOS_DIR}/ACOS-Goddard
-julia --project="." -e 'using Pkg; Pkg.resolve(); Pkg.add(path="https://github.com/US-GHG-Center/RetrievalToolbox.jl"); Pkg.instantiate();'
+
+# If it exists, remove the Manifest file (it might confuse the current installation..)
+if [ -f "Manifest.toml" ]; then
+    rm Manifest.toml
+fi
+# Install packages
+julia --project="." -e 'using Pkg; Pkg.add(path="https://github.com/US-GHG-Center/RetrievalToolbox.jl"); Pkg.instantiate();'
 
 # Step 5, download the needed ACOS files from github
-wget https://github.com/nasa/RtRetrievalFramework/raw/refs/heads/master/input/common/input/l2_solar_model.h5
-wget https://github.com/nasa/RtRetrievalFramework/raw/refs/heads/master/input/common/input/l2_aerosol_combined.h5
-wget https://github.com/nasa/RtRetrievalFramework/raw/refs/heads/master/input/oco/input/l2_oco_static_input.h5
+cd ${ACOS_DIR}/ACOS-Goddard/example_data
+wget -nc https://github.com/nasa/RtRetrievalFramework/raw/refs/heads/master/input/common/input/l2_solar_model.h5
+wget -nc https://github.com/nasa/RtRetrievalFramework/raw/refs/heads/master/input/common/input/l2_aerosol_combined.h5
+wget -nc https://github.com/nasa/RtRetrievalFramework/raw/refs/heads/master/input/oco/input/l2_oco_static_input.h5
