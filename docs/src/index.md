@@ -210,7 +210,8 @@ XRTM_PROGRESS=1 JULIA_NUM_THREADS=1 julia --project=./ -p 3 ./run.jl \
 
 Note that the ACOS Goddard application is not simply spawned three times - we are making use of the `SharedArray` type for distributed computing in Julia such that the big spectroscopy tables are only loaded into memory **once**, and all worker processes access the same data. Users are encouraged to try out various combinations of numbers of processes (`-p`) and numbers of threads (`JULIA_NUM_THREADS`) for optimal throughput, and results are likely to differ for different computing systems.
 
+Early tests on a 32-core node with 64G memory indicate that it ~16 processes with 2 threads each will likely still run, more processes or threads will hit the memory limit soon for a regular configuration. Work to optimize the multi-process batch processing is ongoing. Note that applications built with RetrievalToolbox are generally quite memory-hungry, most objects persist to allow users to introspects all aspects of the retrieval at any given time.
+
 For a given list of sounding IDs, either ingested via the `--sounding_id_list` argument, or by providing more than one ID through `--sounding_id`, the application chops up the list into equal lengths (if possible) and lets each process run through its own sub-list. Note that this is a static assignment for now, and due to the simple nature of this solution, there is no re-balancing of the workload **after** the application is called. So if one worker happens to be given a list of sounding IDs which all have a bad quality flag, that worker process will simply do nothing until all other processes are finished with their respective batch of retrievals. Also note that Julia's `SharedArray` functionality **only works on a single-node**, so running this set-up on a cluster where workers are spawned on different nodes will **not work**.
 
 Users who need a more sophisticated multi-processing set-ups need to implement their own solution.
-
