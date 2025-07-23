@@ -503,13 +503,18 @@ function process_snid(
             break
         end
 
-        @time iter_success = RE.next_iteration!(solver; fm_kwargs)
+        iter_success, iter_time = @timed RE.next_iteration!(solver; fm_kwargs)
         iter_count += 1
+
+        @info "[MAIN] Iteration $(iter_count) took $(iter_time) seconds"
 
         # Print state vector after each iteration?
         q = RE.calculate_OE_quantities(solver);
         if !isnothing(q)
-            RE.print_posterior(solver, q)
+            # Per-iteration output only for single-process runs
+            if nprocs() == 1
+                RE.print_posterior(solver, q)
+            end
         end
 
         if !iter_success
@@ -557,7 +562,9 @@ function process_snid(
         state_vector
     )
 
-    RE.print_posterior(solver)
+    if (nprocs() > 1) # Only output in single-process mode
+        RE.print_posterior(solver)
+    end
 
     return solver, fm_kwargs
 
