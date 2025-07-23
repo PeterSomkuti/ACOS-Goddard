@@ -116,7 +116,12 @@ function parse_commandline(ARGS_input)
         "--h2o_spec"
             help = "Path to H2O spectroscopy"
             arg_type = String
-            required=true
+            required = true
+        "--touch_init"
+            help = "Make an *.h5.init file?"
+            arg_type = Bool
+            required = false
+            default = true
     end
 
     return parse_args(ARGS_input, s)

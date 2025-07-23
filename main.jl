@@ -41,13 +41,13 @@ global_logger(logger);
 Splits a vector into near-equal chunks. If the vector is shorter than the number of
 workers, then empty sub-lists will be returned.
 """
-function distribute_work(arr, n_workers = nworkers())
+function distribute_work(arr, nsub = nprocs())
 
-    chunk_size = div(length(arr), n_workers)
-    remainder = length(arr) % n_workers
+    chunk_size = div(length(arr), nsub)
+    remainder = length(arr) % nsub
 
     return [arr[i*chunk_size + 1 + min(i, remainder):(i+1)*chunk_size + min(i+1, remainder)]
-            for i in 0:n_workers-1]
+            for i in 0:nsub-1]
 end
 
 #=
@@ -207,7 +207,8 @@ function main(barrier_channel, sync_channel, ARGS_in)
             @info "... done!"
         end
 
-        if nworkers() > 1 # In case we are running with more than one process
+        # In case we are running with more than one process
+        if !isempty(workers())
             # Put the ABSCO dict into the remote channel
             println("Root puts ABSCO into channel..")
             put!(absco_channel, abscos)
@@ -218,16 +219,23 @@ function main(barrier_channel, sync_channel, ARGS_in)
         println(".. received ABSCO dictonary!")
         # And put it back for the next one to receive..
         put!(absco_channel, abscos)
+        println(".. puts ABSCO dictonary back into channel.")
 
     end # End myid() == 1
 
-    # Let all workers catch up
-    if myid() > 1
-        put!(sync_channel, myid())
-    else
-        slist = Int[]
-        for id in 2:nworkers() + 1
-            push!(slist, take!(sync_channel))
+    # This section is only needed for more than one process:
+    if !isempty(workers())
+        # Let all workers catch up
+        if myid() > 1
+            @info " .. sends sync signal"
+            put!(sync_channel, myid())
+        else
+            slist = Int[]
+            for id in 2:nprocs()
+                @info "Waits for signal from $(id)"
+                push!(slist, take!(sync_channel))
+                @info "Recieved sync signal from $(id)"
+            end
         end
     end
 
@@ -241,7 +249,6 @@ function main(barrier_channel, sync_channel, ARGS_in)
         `gases["O2"]` delivers the oxygen gas object which itself uses the
         `abscos["O2"]` ABSCO table.
     =#
-
 
     gas_units = Dict(
         "O2" => Unitful.NoUnits,
@@ -381,12 +388,20 @@ function main(barrier_channel, sync_channel, ARGS_in)
     @sync begin
     for sounding_id in sounding_id_list
 
-        GC.gc() # Free up memory, maybe useful for multi-processing
+        # Free up memory, maybe useful for multi-processing
+        # NOTE This is generally not recommended for fast retrievals, but ACOS retrievals
+        # take ~minutes.
+        GC.gc()
 
         @info "##################################"
         @info "RETRIEVING $(sounding_id)"
         @info "##################################"
 
+        # Touch an init file if needed
+        if args["touch_init"]
+            touch_fname = joinpath(args["output"], "$(sounding_id).h5.init")
+            run(`touch $(touch_fname)`)
+        end
         #=
             Read in the retrieval inputs for this scene
         =#
@@ -596,11 +611,10 @@ function main(barrier_channel, sync_channel, ARGS_in)
 
         #=
 
-            Create buffers.
-            Buffers are pre-allocated objects and arrays which the various
-            functions then use to in-place modify and place intermediate
-            results into. This dramatically reduces the amount of allocations
-            which would negatively impact overall performance.
+            Create buffers. Buffers are pre-allocated objects and arrays which the various
+            functions then use to in-place modify and place intermediate results into.
+            This dramatically reduces the amount of allocations which would negatively
+            impact overall performance.
 
         =#
 
@@ -615,10 +629,9 @@ function main(barrier_channel, sync_channel, ARGS_in)
         )
 
         #=
-        Will contain ouptuts of OE calculations
-        (this can be optional, maybe the chosen inversion
-        method does not require an OE buffer, or maybe
-        it requires something else)
+        Will contain ouptuts of OE calculations (this can be optional, maybe the chosen
+        inversion method does not require an OE buffer, or maybe it requires something
+        else)
         =#
 
         oe_buf = RE.OEBuffer(
@@ -822,7 +835,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
         #=
             Process the scene
         =#
-        if myid() > 1 # Do not let root process..
+
         @time solver, fm_kwargs = process_snid(
             spectral_windows,
             scene_inputs,
@@ -837,7 +850,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
             high_options=high_options,
             nus_dict=nus_dict,
             )
-        end
+
         # Return buffer, solver and forward model arguments for single-ID retrieval
         if (args["max_iterations"] == 0) & (length(sounding_id_list) == 1)
             return buf, solver, fm_kwargs
@@ -848,7 +861,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
         if !isnothing(this_result)
 
             # Output file name:
-            outfname = joinpath(args["output"], string(sounding_id) * ".h5")
+            outfname = joinpath(args["output"], "$(sounding_id).h5")
 
             results = Dict()
             results[sounding_id] = this_result
@@ -866,6 +879,13 @@ function main(barrier_channel, sync_channel, ARGS_in)
                 end
             end
             close(fid)
+
+            # Remove init file
+            if args["touch_init"]
+                touch_fname = joinpath(args["output"], "$(sounding_id).h5.init")
+                run(`rm $(touch_fname)`)
+            end
+
             @info "Done."
 
         end

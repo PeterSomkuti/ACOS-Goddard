@@ -146,6 +146,8 @@ Each command line argument will be explained below.
 
 * `--output`: Path to the directory in which the output file will be written. **NOTE!** Within this application, any existing output file is automatically **overwritten**. If you need to skip existing files, it is best to implement those checks within the script(s) that execute the application. Alternatively, users can modify the code in `main.jl`. A single output file is created for each individual sounding ID; users who need a different solution (e.g. writing results into a big parallel NetCDF file) will need to write their own code.
 
+* `--touch_init`: (optional) Determines whether the program will write an *init*-file to signify that this particular sounding ID has started processing. This is useful for book-keeping and to isolate soundings that make the program crash. Once the output file is successfully written out, the *init*-file is removed. The default is `true`.
+
 * `--o2_spec`: Points to the path of the oxygen spectroscopy ABSCO file.
 
 * `--o2_scale`: (optional) Must be a real number. The entire oxygen spectroscopy table is scaled by this value. For ABSCO version 5.2, the recommended value is `1.0048`, but that number was derived with the RtRetrievalFramework and may not be the ideal choice for this algorithm. The default is `1.0`.
@@ -178,17 +180,18 @@ Each command line argument will be explained below.
 
 * `--max_iterations`: (optional) Must be an integer. The inversion is halted after `--max_iterations` number of iterations. Setting this to `1`, for example, will cause the algorithm to execute the forward model once, update the state vector once, and then quit. Setting this to `0` will skip the forward model execution, but still return the objects that could be used for introspection of the retrieval scene setup when used interactively. The default value is `10`.
 
-## Performance aspects, batch processing and scaling
+## Parallel processing
 
-The application supports rudimentary parallel processing via Julia's built-in functions for distributed computing. From a user perspective, the only required change is to execute the script with multiple processes (or workers) with the `-p` flag, and ACOS Goddard will take care of the rest. In our example shipped in this repository, one would run 3 parallel processes to process all 3 IDs in the `sounding_id_list.txt` files at the same time:
+The application supports rudimentary parallel processing via Julia's built-in functions for distributed computing. From a user perspective, the only required change is to execute the script with multiple processes (or workers) with the `-p` flag, and ACOS Goddard will take care of the rest. In our example shipped in this repository, one would run 3 parallel processes in total to process all 3 IDs in the `sounding_id_list.txt` files at the same time. Note that the `-p` flag denotes the number of additional worker processes, so the total number of available processes is that number plus one.
 
 ``` bash
-XRTM_PROGRESS=1 JULIA_NUM_THREADS=1 julia --project=./ -p 3 ./run.jl \
+XRTM_PROGRESS=1 JULIA_NUM_THREADS=1 julia --project=./ -p 2 ./run.jl \
         --solar_model ./example_data/l2_solar_model.h5 \
         --L1b ./example_data/2021030111564431_inputs.h5 \
         --L2Met ./example_data/2021030111564431_inputs.h5 \
         --L2CPr ./example_data/2021030111564431_inputs.h5 \
         --output 2021030111564431.h5 \
+        --touch_init true \
         --o2_spec ./example_data/o2_v52.hdf \
         --o2_scale 1.0048 \
         --co2_spec ./example_data/co2_v52.hdf \
@@ -208,10 +211,15 @@ XRTM_PROGRESS=1 JULIA_NUM_THREADS=1 julia --project=./ -p 3 ./run.jl \
         --max_iterations 10
 ```
 
-Note that the ACOS Goddard application is not simply spawned three times - we are making use of the `SharedArray` type for distributed computing in Julia such that the big spectroscopy tables are only loaded into memory **once**, and all worker processes access the same data. Users are encouraged to try out various combinations of numbers of processes (`-p`) and numbers of threads (`JULIA_NUM_THREADS`) for optimal throughput, and results are likely to differ for different computing systems.
+Note that the ACOS Goddard application is not only spawned three times - we are making use of the `SharedArray` type for distributed computing in Julia such that the big spectroscopy tables are only loaded into memory **once**, and all worker processes access the same data. The `-p` flag determines the number of **additional** processes that are spawned; so `-p 2` will spawn 2 more processes, and ACOS Goddard will perform retrievals on a total of 3 parallel processes.
 
-Early tests on a 32-core node with 64G memory indicate that it ~16 processes with 2 threads each will likely still run, more processes or threads will hit the memory limit soon for a regular configuration. Work to optimize the multi-process batch processing is ongoing. Note that applications built with RetrievalToolbox are generally quite memory-hungry, most objects persist to allow users to introspects all aspects of the retrieval at any given time.
+Users are encouraged to try out various combinations of numbers of **additional** processes (`-p`) and numbers of threads (`JULIA_NUM_THREADS`) for optimal throughput, and results are likely to differ for different computing systems.
+
+Early tests on a 32-core node with 64G memory indicate that it ~16 processes with 2 threads each will likely still run, whereas more processes or threads will hit the memory limit soon for a regular configuration. Work to optimize the multi-process batch processing is ongoing. Note that applications built with RetrievalToolbox are generally quite memory-hungry, most objects persist to allow users to introspects all aspects of the retrieval at any given time.
 
 For a given list of sounding IDs, either ingested via the `--sounding_id_list` argument, or by providing more than one ID through `--sounding_id`, the application chops up the list into equal lengths (if possible) and lets each process run through its own sub-list. Note that this is a static assignment for now, and due to the simple nature of this solution, there is no re-balancing of the workload **after** the application is called. So if one worker happens to be given a list of sounding IDs which all have a bad quality flag, that worker process will simply do nothing until all other processes are finished with their respective batch of retrievals. Also note that Julia's `SharedArray` functionality **only works on a single-node**, so running this set-up on a cluster where workers are spawned on different nodes will **not work**.
 
-Users who need a more sophisticated multi-processing set-ups need to implement their own solution.
+Should a worker process unexpectedly terminate, all references inside Julia's worker pool are removed automatically by Julia itself, so the program will keep running. However there is no re-balancing of the terminated worker's sounding ID list, so those soundings will not be processed in this run.
+
+!!! note "This is proof-of-concept as of now!"
+    The current implementation of parallel processing is mainly a proof-of-concept and has not been tested for large-scale production. Users who need a more sophisticated multi-processing set-ups need to implement their own solution.
