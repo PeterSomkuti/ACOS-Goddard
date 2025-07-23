@@ -11,7 +11,7 @@ using DocStringExtensions
 using HDF5
 using Interpolations
 using LinearAlgebra
-using Logging
+using Logging, LoggingExtras
 using LoopVectorization
 using Printf
 using ProgressMeter
@@ -36,6 +36,16 @@ include("collect_results.jl")
 
 logger = ConsoleLogger(stderr, Logging.Info);
 global_logger(logger);
+
+# During multi-processing, let us reduce the number of log messages printed out
+function multi_filter(log_args)
+    startswith(log_args.message, "[MAIN]")
+end
+
+if nprocs() > 1
+    global_logger(ActiveFilteredLogger(multi_filter, global_logger()));
+end
+
 
 """
 Splits a vector into near-equal chunks. If the vector is shorter than the number of
@@ -93,7 +103,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
     # Each worker grabs its own share:
     sounding_id_list = distribute_work(sounding_id_list)[myid()]
 
-    @info "ACOS-Goddard will process N=$(length(sounding_id_list)) scenes."
+    @info "[MAIN] ACOS-Goddard will process N=$(length(sounding_id_list)) scenes."
 
     # Parse the spectral windows
     spec_array = [parse(Int, x) for x in split(args["spec"], ",")]
@@ -210,16 +220,16 @@ function main(barrier_channel, sync_channel, ARGS_in)
         # In case we are running with more than one process
         if !isempty(workers())
             # Put the ABSCO dict into the remote channel
-            println("Root puts ABSCO into channel..")
+            @info "[MAIN] Root puts ABSCO into channel.."
             put!(absco_channel, abscos)
         end
     else
         # Other workers wait their turn and recieve them
         abscos = take!(absco_channel)
-        println(".. received ABSCO dictonary!")
+        @info "[MAIN] .. received ABSCO dictonary!"
         # And put it back for the next one to receive..
         put!(absco_channel, abscos)
-        println(".. puts ABSCO dictonary back into channel.")
+        @info "[MAIN] .. puts ABSCO dictonary back into channel."
 
     end # End myid() == 1
 
@@ -227,14 +237,14 @@ function main(barrier_channel, sync_channel, ARGS_in)
     if !isempty(workers())
         # Let all workers catch up
         if myid() > 1
-            @info " .. sends sync signal"
+            @info "[MAIN] .. sends sync signal"
             put!(sync_channel, myid())
         else
             slist = Int[]
             for id in 2:nprocs()
-                @info "Waits for signal from $(id)"
+                @info "[MAIN] Waits for signal from $(id)"
                 push!(slist, take!(sync_channel))
-                @info "Recieved sync signal from $(id)"
+                @info "[MAIN] Recieved sync signal from $(id)"
             end
         end
     end
@@ -394,7 +404,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
         GC.gc()
 
         @info "##################################"
-        @info "RETRIEVING $(sounding_id)"
+        @info "[MAIN] RETRIEVING $(sounding_id)"
         @info "##################################"
 
         # Touch an init file if needed
@@ -836,7 +846,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
             Process the scene
         =#
 
-        @time solver, fm_kwargs = process_snid(
+        (solver, fm_kwargs), proc_time = @timed process_snid(
             spectral_windows,
             scene_inputs,
             state_vector,
@@ -850,6 +860,8 @@ function main(barrier_channel, sync_channel, ARGS_in)
             high_options=high_options,
             nus_dict=nus_dict,
             )
+
+        @info "[MAIN] $(sounding_id) finished in $(proc_time) seconds"
 
         # Return buffer, solver and forward model arguments for single-ID retrieval
         if (args["max_iterations"] == 0) & (length(sounding_id_list) == 1)
@@ -886,7 +898,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
                 run(`rm $(touch_fname)`)
             end
 
-            @info "Done."
+            @info "[MAIN] Done retrieving $(sounding_id)"
 
         end
 
