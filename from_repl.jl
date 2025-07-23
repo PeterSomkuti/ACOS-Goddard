@@ -22,6 +22,7 @@ my_args = [
     #"--sounding_id", "2021030111564431", "2021030111564431", # Which single sounding ID(s) to process
     #"--sounding_id_list", "sounding_id_list.txt", # Which soundings (list) to process
     "--output", "./", # Path to where the output file will be written
+    "--touch_init", "true", # Whether to write init-files
     "--o2_spec", "./data/o2_v52.hdf", # path to O2 ABSCO file
     "--o2_scale", "1.0048", # scaling factor for oxygen spectroscopy
     "--co2_spec", "./data/co2_v52.hdf", # path to CO2 ABSCO file
@@ -41,12 +42,14 @@ my_args = [
     "--max_iterations", "10", # number of iterations before the retrieval is forced to stop
 ]
 
-# For distributed, we need to do this:
+# For distributed, we need to have channels to synchronize operations and moving the
+# spectroscopy data around:
 barrier_channel = RemoteChannel(() -> Channel{RemoteChannel}(1))
+sync_channel = RemoteChannel(() -> Channel{Any}(nworkers() - 1))
 
 @everywhere my_args = $my_args
 @everywhere empty!(ARGS)
 @everywhere push!(ARGS, my_args...)
 
 @everywhere include("main.jl")
-@everywhere main($barrier_channel)
+@everywhere main($barrier_channel, $sync_channel, ARGS)
