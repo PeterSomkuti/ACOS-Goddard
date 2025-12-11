@@ -18,4 +18,4 @@ TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [sources]
-RetrievalToolbox = {rev = "main", url = "https://github.com/US-GHG-Center/RetrievalToolbox.jl"}
+RetrievalToolbox = {rev = "dev", url = "https://github.com/US-GHG-Center/RetrievalToolbox.jl"}
