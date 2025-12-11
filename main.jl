@@ -68,7 +68,7 @@ end
 N_RT_lev = 20
 # What number type we use (keep this Float64)
 #=
-    Note - for flexibility, RetrievalToolbox does not use many eplicit Float64 variables
+    Note - for flexibility, RetrievalToolbox does not use many explicit Float64 variables
     or arrays. Users could thus, in theory, write a retrieval application that makes use
     of mostly Float32 to save memory. XRTM, however, explicitly requires Float64s in many
     functions, hence we have no choice but to leave this as Float64 for the time being.
@@ -109,20 +109,25 @@ function main(barrier_channel, sync_channel, ARGS_in)
     # Each worker grabs its own share:
     sounding_id_list = distribute_work(sounding_id_list)[myid()]
 
-    @info "[MAIN] ACOS-Goddard will process N=$(length(sounding_id_list)) scenes."
+    if length(sounding_id_list) > 0
+        @info "[MAIN] ACOS-Goddard will process N=$(length(sounding_id_list)) scenes."
+    else
+        @info "[MAIN] No soundings to process. Exiting."
+        return
+    end
 
     # Parse the spectral windows
     spec_array = [parse(Int, x) for x in split(args["spec"], ",")]
 
     # Which spectrometers are we processing?
     if 1 in spec_array
-        @info "Processing O2 A-band"
+        @info "[MAIN] Processing O2 A-band"
     end
     if 2 in spec_array
-        @info "Processing Weak CO2 band"
+        @info "[MAIN] Processing Weak CO2 band"
     end
     if 3 in spec_array
-        @info "Processing Strong CO2 band"
+        @info "[MAIN] Processing Strong CO2 band"
     end
 
     #=
@@ -157,17 +162,19 @@ function main(barrier_channel, sync_channel, ARGS_in)
         # Signal to all workers that channel is ready
         put!(barrier_channel, absco_channel)
     else
-        # Worker takes it from the channel
+        # Worker takes it from the channel - whoever comes first grabs it first, and
+        # then puts it back.
         absco_channel = take!(barrier_channel)
         # Puts it back for the next one to grab it
         put!(barrier_channel, absco_channel)
     end
 
-
     if myid() == 1
 
+        @info "[MAIN] Loading spectroscopy"
+
         # Generate SharedArray only if we have multi-processing..
-        distributed = nprocs() > 1
+        distributed = true #nprocs() > 1
 
         # Root channel creates the ABSCO dict, and loads the data..
         abscos = Dict{String, RE.AbstractSpectroscopy}()
@@ -177,27 +184,29 @@ function main(barrier_channel, sync_channel, ARGS_in)
 
         # If we use the O2 A-band, we need O2 at least
         if 1 in spec_array
-            @info "Reading in O2 spectroscopy ..."
+
+            @info "[MAIN] Reading in O2 spectroscopy ..."
+
             abscos["O2"] = load_spectroscopy(
                 # Pass the path to the ABSCO file
                 args["o2_spec"],
                 spectral_unit=:Wavelength,
                 distributed=distributed
             )
-            @info "... done!"
+            @info "[MAIN] ... done!"
 
             # Apply a user-defined spectroscopy scaling factor. This can be done to the
             # entire spectroscopic table since oxygen is only present in the A-band
             # anyway.
             # Note: scaling should only be done by ONE worker in case of distributed
-            @info "Scaling O2 cross sections by $(args["o2_scale"])"
+            @info "[MAIN] Scaling O2 cross sections by $(args["o2_scale"])"
             abscos["O2"].cross_section[:] .*= args["o2_scale"]
 
         end
 
         # If we use either of the two CO2 bands, we need H2O and CO2
         if (2 in spec_array) | (3 in spec_array)
-            @info "Reading in CO2 spectroscopy ..."
+            @info "[MAIN] Reading in CO2 spectroscopy ..."
 
             # Find out which ABSCO loader to use.. (this is from io.jl)
             load_spectroscopy = which_ABSCO_loader(args["co2_spec"])
@@ -208,14 +217,12 @@ function main(barrier_channel, sync_channel, ARGS_in)
                 spectral_unit=:Wavelength,
                 distributed=distributed
             )
-            @info "... done!"
+            @info "[MAIN] ... done!"
 
             # Apply a user-defined scale factor for CO2 spectroscopy in the weak band
-            @info "Scaling CO2 cross sections for weak CO2 by " *
+            @info "[MAIN] Scaling CO2 cross sections for weak CO2 by " *
                 "$(args["co2_scale_weak"])"
             idx_weak = findall(abscos["CO2"].ww * abscos["CO2"].ww_unit .< 2.0u"µm")
-
-            @info abscos["CO2"] isa ABSCOAERSpectroscopy4D
 
             # Note that data order is different between ABSCO and ABSCOAER data
             # ABSCOAER has H2O VMR, p, T, spectral
@@ -243,7 +250,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
             abscos["CO2"].cross_section[idx...] .*= args["co2_scale_strong"]
 
 
-            @info "Reading in H2O spectroscopy ..."
+            @info "[MAIN] Reading in H2O spectroscopy ..."
 
             # Find out which ABSCO loader to use.. (this is from io.jl)
             load_spectroscopy = which_ABSCO_loader(args["h2o_spec"])
@@ -254,7 +261,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
                 spectral_unit=:Wavelength,
                 distributed=distributed
             )
-            @info "... done!"
+            @info "[MAIN] ... done!"
         end
 
         # In case we are running with more than one process
@@ -263,7 +270,10 @@ function main(barrier_channel, sync_channel, ARGS_in)
             @info "[MAIN] Root puts ABSCO into channel.."
             put!(absco_channel, abscos)
         end
+
     else
+
+        @info "[MAIN] waiting for ABSCO dictionary ..."
         # Other workers wait their turn and recieve them
         abscos = take!(absco_channel)
         @info "[MAIN] .. received ABSCO dictonary!"
@@ -473,7 +483,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
         # Skip bad soundings immediately
         _input = first(values(scene_inputs))
         if _input["sounding_qual_flag"][sounding_id] != 0
-            @info "[MAIN] Bad sounding quality for $(sounding_id). Exiting."
+            @info "Bad sounding quality for $(sounding_id). Exiting."
 
             # Remove init file
             if args["touch_init"]
@@ -934,10 +944,14 @@ function main(barrier_channel, sync_channel, ARGS_in)
             # Remove init file
             if args["touch_init"]
                 touch_fname = joinpath(args["output"], "$(sounding_id).h5.init")
-                run(`rm $(touch_fname)`)
+                if isfile(touch_fname)
+                    run(`rm $(touch_fname)`)
+                else
+                    @warn "[MAIN] Init file $(touch_fname) not found! Maybe someone deleted it!"
+                end
             end
 
-            @info "[MAIN] Done retrieving $(sounding_id)"
+            @info "Done retrieving $(sounding_id)"
 
         end
 

@@ -505,13 +505,11 @@ function process_snid(
 
         @info "[MAIN] Iteration $(iter_count) took $(iter_time) seconds"
 
-        # Print state vector after each iteration?
-        q = RE.calculate_OE_quantities(solver);
-        if !isnothing(q)
-            # Per-iteration output only for single-process runs
-            if nprocs() == 1
-                RE.print_posterior(solver, q)
-            end
+        # Print state vector updates after each iteration?
+
+        # Per-iteration output only for single-process runs
+        if nprocs() == 1
+            RE.print_state_vector_update(state_vector)
         end
 
         if !iter_success

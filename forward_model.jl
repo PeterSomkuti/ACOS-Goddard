@@ -175,7 +175,7 @@ function forward_model!(
 
     end
 
-    @info " ... done!"
+    @info "RT finished!"
 
     # Apply Stokes coefficients and solar model to produce the at-instrument
     # radiances *before* applying the ISRF. Note that we store the intermediate
