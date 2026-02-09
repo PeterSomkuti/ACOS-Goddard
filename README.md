@@ -1,5 +1,8 @@
 # ACOS Goddard
 
+[![Documentation](https://img.shields.io/badge/Documentation-blue.svg)](https://retrievaltoolbox.github.io/ACOS-Goddard/)
+[![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+
 This is an independent implementation of NASA's ACOS retrieval algorithm, making use of the [RetrievalToolbox.jl library](https://github.com/US-GHG-Center/RetrievalToolbox.jl). More on the ACOS algorithm can be found in following publications:
 
 * version 8: [https://doi.org/10.5194/amt-11-6539-2018](https://doi.org/10.5194/amt-11-6539-2018)
