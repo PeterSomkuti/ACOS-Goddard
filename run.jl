@@ -5,6 +5,14 @@ using Distributed
 barrier_channel = RemoteChannel(() -> Channel{RemoteChannel}(1))
 sync_channel = RemoteChannel(() -> Channel{Any}(nworkers() * 2))
 
+
+# Check to see if XRTM_PATH is set.
+if !haskey(ENV, "XRTM_PATH")
+    @error "This application needs the XRTM radiative transfer library!"
+    error("Environment variable XRTM_PATH must be set!")
+end
+
+
 # We have to make sure all workers have the same command line arguments before
 # we enter main.jl
 
