@@ -207,7 +207,6 @@ function forward_model!(
                 isrf[spec], # ISRF table
                 dispersion[spec], # Dispersion
                 hires, # radiance
-                swin,
                 doppler_factor=doppler_factor
             )
 
@@ -259,7 +258,6 @@ function forward_model!(
                         isrf[spec], # ISRF table
                         dispersion[spec], # Dispersion
                         hires,
-                        swin,
                         doppler_factor=doppler_factor
                     )
 
