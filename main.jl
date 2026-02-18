@@ -1,6 +1,7 @@
 # The retrieval toolkit - every function you use with a RE.xxx is from there
 # Any other function is either from a third-party module or from this repo.
-using Pkg; Pkg.activate("/Users/psomkuti/Work/ghgc/RetrievalToolbox.jl/")
+#using Pkg; Pkg.activate("/Users/psomkuti/Work/ghgc/RetrievalToolbox.jl/")
+
 using RetrievalToolbox
 const RE = RetrievalToolbox
 
@@ -153,20 +154,22 @@ function main(barrier_channel, sync_channel, ARGS_in)
         memory space.
     =#
 
-    local absco_channel
+    if nworkers() > 1
+        local absco_channel
 
-    if myid() == 1
-        # Root creates the absco coordination channel
-        absco_channel = RemoteChannel(() ->
-            Channel{Dict{String, RE.AbstractSpectroscopy}}(1))
-        # Signal to all workers that channel is ready
-        put!(barrier_channel, absco_channel)
-    else
-        # Worker takes it from the channel - whoever comes first grabs it first, and
-        # then puts it back.
-        absco_channel = take!(barrier_channel)
-        # Puts it back for the next one to grab it
-        put!(barrier_channel, absco_channel)
+        if myid() == 1
+            # Root creates the absco coordination channel
+            absco_channel = RemoteChannel(() ->
+                Channel{Dict{String, RE.AbstractSpectroscopy}}(1))
+            # Signal to all workers that channel is ready
+            put!(barrier_channel, absco_channel)
+        else
+            # Worker takes it from the channel - whoever comes first grabs it first, and
+            # then puts it back.
+            absco_channel = take!(barrier_channel)
+            # Puts it back for the next one to grab it
+            put!(barrier_channel, absco_channel)
+        end
     end
 
     if myid() == 1
@@ -174,7 +177,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
         @info "[MAIN] Loading spectroscopy"
 
         # Generate SharedArray only if we have multi-processing..
-        distributed = true #nprocs() > 1
+        distributed = nprocs() > 1
 
         # Root channel creates the ABSCO dict, and loads the data..
         abscos = Dict{String, RE.AbstractSpectroscopy}()
@@ -265,7 +268,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
         end
 
         # In case we are running with more than one process
-        if !isempty(workers())
+        if nworkers() > 1
             # Put the ABSCO dict into the remote channel
             @info "[MAIN] Root puts ABSCO into channel.."
             put!(absco_channel, abscos)
@@ -273,18 +276,20 @@ function main(barrier_channel, sync_channel, ARGS_in)
 
     else
 
-        @info "[MAIN] waiting for ABSCO dictionary ..."
-        # Other workers wait their turn and recieve them
-        abscos = take!(absco_channel)
-        @info "[MAIN] .. received ABSCO dictonary!"
-        # And put it back for the next one to receive..
-        put!(absco_channel, abscos)
-        @info "[MAIN] .. puts ABSCO dictonary back into channel."
+        if nworkers() > 1
+            @info "[MAIN] waiting for ABSCO dictionary ..."
+            # Other workers wait their turn and recieve them
+            abscos = take!(absco_channel)
+            @info "[MAIN] .. received ABSCO dictonary!"
+            # And put it back for the next one to receive..
+            put!(absco_channel, abscos)
+            @info "[MAIN] .. puts ABSCO dictonary back into channel."
+        end
 
     end # End myid() == 1
 
     # This section is only needed for more than one process:
-    if !isempty(workers())
+    if nworkers() > 1
         # Let all workers catch up
         if myid() > 1
             @info "[MAIN] .. sends sync signal"
