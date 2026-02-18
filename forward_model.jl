@@ -214,7 +214,7 @@ function forward_model!(
             @warn "Application of ISRF on radiances for $(swin) FAILED."
             return false
         else
-            @debug "Application of ISRF on radiances for $(swin)successful."
+            @debug "Application of ISRF on radiances for $(swin) successful."
         end
 
         # Store in RT buffer, but account for unit differences!
