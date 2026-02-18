@@ -18,8 +18,8 @@ my_args = [
     "--L1b", "./example_data/2021030111564431_inputs.h5", # Path to L1B file
     "--L2Met", "./example_data/2021030111564431_inputs.h5", # Path to L2Met file
     "--L2CPr", "./example_data/2021030111564431_inputs.h5", # Path to L2CPr file
-    "--sounding_id", "2021030111564431", # Which single sounding ID to process
-    #"--sounding_id", "2021030111564431", "2021030111564431", # Which single sounding ID(s) to process
+    #"--sounding_id", "2021030111564431", # Which single sounding ID to process
+    "--sounding_id", "2021030111564431", "2021030111564431", # Which single sounding ID(s) to process
     #"--sounding_id_list", "sounding_id_list.txt", # Which soundings (list) to process
     "--output", "./", # Path to where the output file will be written
     "--touch_init", "true", # Whether to write init-files
@@ -37,7 +37,7 @@ my_args = [
     "--retrieve_psurf", "true", # retrieve surface pressure (only works if A-band is retrieved)?
     "--LSI", "true", # use LSI to get high-accuracy MS calculations?
     "--Nhigh", "16", # what number of (half-)streams to use with LSI?
-    "--gamma", "100.0", # LM-gamma initial value
+    "--gamma", "10.0", # LM-gamma initial value
     "--dsigma_scale", "2.0", # scale factor for convergence check (higher means faster convergence)
     "--max_iterations", "10", # number of iterations before the retrieval is forced to stop
 ]
@@ -62,5 +62,5 @@ else
     push!(ARGS, my_args...)
 
     include("main.jl")
-    main(barrier_channel, sync_channel, ARGS)
+    main(nothing, nothing, ARGS)
 end

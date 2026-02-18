@@ -524,7 +524,7 @@ function process_snid(
         all_chi2_small = true
         for (k,v) in chi2
             @info "$(k): χ² = $(v)"
-            if (v > 5.0)
+            if (v > 50.0)
                 all_chi2_small = false
             end
         end
@@ -536,6 +536,7 @@ function process_snid(
             solver.gamma = max(1000, solver.gamma)
             @info "Setting LM-γ to $(solver.gamma)"
         end
+
 
         @info "LM-γ: $(solver.gamma)"
 

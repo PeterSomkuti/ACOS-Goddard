@@ -25,7 +25,7 @@ my_args = [
     "--touch_init", "true", # Whether to write init-files
     "--o2_spec", "data/O2_12745-13245_v0.0_ACOS.nc", # path to O2 ABSCO file
     #"--o2_scale", "1.0048", # scaling factor for oxygen spectroscopy
-    "--co2_spec", "data/test.hdf", #"data/CO2_0res0025_ISOGG.hdf", # path to CO2 ABSCO file
+    "--co2_spec", "data/CO2_04760-06300_v0.0_ACOS.nc", #"data/CO2_0res0025_ISOGG.hdf", # path to CO2 ABSCO file
     #"--co2_scale_weak", "0.994", # scaling factor for CO2 spectroscopy in weak band
     #"--co2_scale_strong", "0.998", # scaling factor for CO2 spectroscopy in strong band
     "--h2o_spec", "data/H2O_04760-06300_v0.0_ACOS.nc", # path to H2O ABSCO file
@@ -37,7 +37,7 @@ my_args = [
     "--retrieve_psurf", "true", # retrieve surface pressure (only works if A-band is retrieved)?
     "--LSI", "true", # use LSI to get high-accuracy MS calculations?
     "--Nhigh", "16", # what number of (half-)streams to use with LSI?
-    "--gamma", "250.0", # LM-gamma initial value
+    "--gamma", "100.0", # LM-gamma initial value
     "--dsigma_scale", "2.0", # scale factor for convergence check (higher means faster convergence)
     "--max_iterations", "10", # number of iterations before the retrieval is forced to stop
 ]
@@ -62,5 +62,5 @@ else
     push!(ARGS, my_args...)
 
     include("main.jl")
-    main(barrier_channel, sync_channel, ARGS)
+    main(nothing, nothing, ARGS)
 end
