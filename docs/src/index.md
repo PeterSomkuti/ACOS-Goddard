@@ -104,6 +104,9 @@ which will start the Jupyter server and open a web browser. Alternatively, users
 
 Instead of running `from_repl.jl`, users can of course tailor the inputs to the retrieval algorithm. Below is an example of how to call `run.jl`, which is the main application to be used. Like before, this assumes that the required auxiliary data is downloaded and placed into the correct folders, and that `XRTM_PATH` is correctly set. The below example runs a single retrieval with the sounding ID `2021030111564431`. To process several soundings, users can invoke the `--sounding_id_list` command line argument, explained further below.
 
+!!! note "Reminder!"
+    Users **must** first obtain the required data (spectroscopy, solar model, common inputs) first, otherwise the application **will not run**!
+
 ``` bash
 XRTM_PROGRESS=1 JULIA_NUM_THREADS=3 julia --project=./ ./run.jl \
         --solar_model ./example_data/l2_solar_model.h5 \
@@ -117,7 +120,7 @@ XRTM_PROGRESS=1 JULIA_NUM_THREADS=3 julia --project=./ ./run.jl \
         --co2_scale_weak 0.994 \
         --co2_scale_strong 0.998 \
         --h2o_spec ./example_data/h2o_v52.hdf \
-        --sounding_id 2021030111564431 \ # alternative: --sounding_id_list sounding_id_list.txt
+        --sounding_id 2021030111564431 \
         --spec 1,2,3 \
         --polarized true \
         --Lambertian false \
