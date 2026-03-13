@@ -122,6 +122,11 @@ function parse_commandline(ARGS_input)
             arg_type = Bool
             required = false
             default = true
+        "--NUS"
+            help = "Use non-uniform sampling to speed up monochromatic RT"
+            arg_type = Bool
+            required = false
+            default = true
     end
 
     return parse_args(ARGS_input, s)

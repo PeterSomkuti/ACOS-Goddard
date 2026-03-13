@@ -1,6 +1,5 @@
 # The retrieval toolkit - every function you use with a RE.xxx is from there
 # Any other function is either from a third-party module or from this repo.
-#using Pkg; Pkg.activate("/Users/psomkuti/Work/ghgc/RetrievalToolbox.jl/")
 
 using RetrievalToolbox
 const RE = RetrievalToolbox
@@ -773,6 +772,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
 
         mo1["solvers"] = ["single"]
         mo1["add"] = true
+        mo1["sun_normalized"] = true
         mo1["streams"] = 2
         mo1["options"] = [
             "output_at_levels",
@@ -796,6 +796,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
 
         mo2["solvers"] = ["two_stream"]
         mo2["add"] = true
+        mo2["sun_normalized"] = true
         mo2["streams"] = 2
         mo2["options"] = [
             "output_at_levels",
@@ -828,6 +829,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
         hmo1 = Dict()
         hmo1["solvers"] = ["single"]
         hmo1["add"] = true
+        hmo1["sun_normalized"] = true
         hmo1["streams"] = Nhigh
         hmo1["options"] = [
             "output_at_levels",
@@ -852,6 +854,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
         hmo2 = Dict()
         hmo2["solvers"] = ["two_os"]
         hmo2["add"] = true
+        hmo2["sun_normalized"] = true
         hmo2["streams"] = Nhigh
         hmo2["options"] = [
             "output_at_levels",
@@ -865,6 +868,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
         hmo3 = Dict()
         hmo3["solvers"] = ["eig_bvp"]
         hmo3["add"] = true
+        hmo3["sun_normalized"] = true
         hmo3["streams"] = Nhigh
         hmo3["options"] = [
             "output_at_levels",
@@ -911,8 +915,8 @@ function main(barrier_channel, sync_channel, ARGS_in)
             dsigma_scale=args["dsigma_scale"],
             co2_cov=CO2_covar,
             high_options=high_options,
-            nus_dict=nus_dict,
-            )
+            nus_dict=args["NUS"] ? nus_dict : nothing,
+        )
 
         @info "[MAIN] $(sounding_id) finished in $(proc_time) seconds"
 

@@ -340,9 +340,10 @@ function process_snid(
     # Calculate prior albedo value from radiances, and also
     # account for the Stokes coefficient
     for (spec, swin) in swins
+
         # Find out any unit conversion factor between measured radiance (rt_buf.radiance_unit)
         # and the radiance we are using internally.
-        unit_fac = rt_buf.radiance_unit / buf.rt[swin].radiance_unit
+        unit_fac = 1.0 * buf.rt[swin].radiance_unit / rt_buf.radiance_unit
 
         # Calculate apparent albedo from the measured radiances
 
