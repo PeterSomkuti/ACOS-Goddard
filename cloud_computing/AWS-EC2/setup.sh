@@ -42,7 +42,7 @@ if [ -d "${XRTM_DIR}" ]; then
     echo "Directory xrtm already exists. If you want a re-install, delete please."
 else
     echo "Cloining and building XRTM"
-    git clone https://github.com/PeterSomkuti/xrtm ${XRTM_DIR}
+    git clone https://github.com/RetrievalToolbox/xrtm ${XRTM_DIR}
     # copy patch
     cp xrtm_make.patch ${XRTM_DIR}
     # move into XRTM directory and copy makefile
