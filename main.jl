@@ -46,7 +46,6 @@ if nprocs() > 1
     global_logger(ActiveFilteredLogger(multi_filter, global_logger()));
 end
 
-
 """
 Splits a vector into near-equal chunks. If the vector is shorter than the number of
 workers, then empty sub-lists will be returned.
@@ -153,7 +152,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
         memory space.
     =#
 
-    if nworkers() > 1
+    if nprocs() > 1
         local absco_channel
 
         if myid() == 1
@@ -267,7 +266,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
         end
 
         # In case we are running with more than one process
-        if nworkers() > 1
+        if nprocs() > 1
             # Put the ABSCO dict into the remote channel
             @info "[MAIN] Root puts ABSCO into channel.."
             put!(absco_channel, abscos)
@@ -275,7 +274,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
 
     else
 
-        if nworkers() > 1
+        if nprocs() > 1
             @info "[MAIN] waiting for ABSCO dictionary ..."
             # Other workers wait their turn and recieve them
             abscos = take!(absco_channel)
@@ -288,7 +287,7 @@ function main(barrier_channel, sync_channel, ARGS_in)
     end # End myid() == 1
 
     # This section is only needed for more than one process:
-    if nworkers() > 1
+    if nprocs() > 1
         # Let all workers catch up
         if myid() > 1
             @info "[MAIN] .. sends sync signal"
