@@ -104,11 +104,11 @@ function collect_results(
     result["/RetrievalResults/vector_pressure_levels"] =
         cat((atm.pressure_levels * atm.pressure_unit .|> u"Pa" .|> ustrip)..., dims=2)'
     result["/RetrievalResults/vector_pressure_levels_met"] =
-        cat((atm.met_pressure_levels * atm.met_pressure_unit .|> u"Pa" .|> ustrip)..., dims=2)'
+        cat((atm.met_pressure * atm.met_pressure_unit .|> u"Pa" .|> ustrip)..., dims=2)'
     result["/RetrievalResults/specific_humidity_profile_met"] =
-        cat((atm.specific_humidity_levels * atm.specific_humidity_unit .|> NoUnits .|> ustrip)..., dims=2)'
+        cat((atm.specific_humidity * atm.specific_humidity_unit .|> NoUnits .|> ustrip)..., dims=2)'
     result["/RetrievalResults/temperature_profile_met"] =
-        cat((atm.temperature_levels * atm.temperature_unit .|> u"K" .|> ustrip)..., dims=2)'
+        cat((atm.temperature * atm.temperature_unit .|> u"K" .|> ustrip)..., dims=2)'
 
 
     # total column for each gas

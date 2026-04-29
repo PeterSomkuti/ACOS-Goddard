@@ -99,7 +99,7 @@ function process_snid(
     # Pressure grid must be turned into Pa
     RE.ingest!(
             buf.scene.atmosphere,
-            :met_pressure_levels,
+            :met_pressure,
             met[snid]["pressure_levels_met"]
             )
 
@@ -107,14 +107,14 @@ function process_snid(
     # Ingest specific humidity, which has unit 1 (kg/kg)
     RE.ingest!(
         buf.scene.atmosphere,
-        :specific_humidity_levels,
+        :specific_humidity,
         met[snid]["specific_humidity_profile_met"]
     )
 
     # Temperature profile must be turned into K
     RE.ingest!(
         buf.scene.atmosphere,
-        :temperature_levels,
+        :temperature,
         met[snid]["temperature_profile_met"]
     )
 
@@ -130,7 +130,7 @@ function process_snid(
 
         # Interpolate onto the retrieval grid (this needs to be better! it's not Xgas conserving!)
         co2_prior = RE.atmospheric_profile_interpolator_linear(
-            buf.scene.atmosphere.met_pressure_levels,
+            buf.scene.atmosphere.met_pressure,
             co2_met_levels,
             buf.scene.atmosphere.pressure_levels
             )
@@ -148,8 +148,8 @@ function process_snid(
     if !isnothing(atm_h2o)
 
         sh_profile = RE.atmospheric_profile_interpolator_linear(
-            buf.scene.atmosphere.met_pressure_levels,
-            buf.scene.atmosphere.specific_humidity_levels,
+            buf.scene.atmosphere.met_pressure,
+            buf.scene.atmosphere.specific_humidity,
             buf.scene.atmosphere.pressure_levels
             )
 
@@ -501,10 +501,12 @@ function process_snid(
             break
         end
 
-        iter_success, iter_time = @timed RE.next_iteration!(solver; fm_kwargs)
+        iter_success, iter_time, iter_allocs =
+            @timed RE.next_iteration!(solver; fm_kwargs)
         iter_count += 1
 
-        @info "[MAIN] Iteration $(iter_count) took $(iter_time) seconds"
+        @info "[MAIN] Iteration $(iter_count) took $(iter_time) seconds and allocated \
+            $(iter_allocs / 2^20 |> round |> Int) Mbytes."
 
         # Print state vector updates after each iteration?
 

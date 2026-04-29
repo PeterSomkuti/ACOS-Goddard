@@ -50,7 +50,7 @@ function forward_model!(
         @views buf.scene.atmosphere.pressure_levels[:] = ustrip.(
             Ref(buf.scene.atmosphere.pressure_unit),
             RE.create_ACOS_pressure_grid(new_psurf * sve.unit)
-            )
+        )
         =#
 
         # Shift lowest pressure level according to the psurf SVE
@@ -70,12 +70,6 @@ function forward_model!(
 
         # Re-calculate z and g
         RE.calculate_altitude_and_gravity!(buf.scene)
-
-        # .. and again calculate mid-layer values.
-        buf.scene.atmosphere.gravity_layers[:] =
-            RE.levels_to_layers(buf.scene.atmosphere.gravity_levels)
-        buf.scene.atmosphere.altitude_layers[:] =
-            RE.levels_to_layers(buf.scene.atmosphere.altitude_levels)
 
     end
 
@@ -153,24 +147,24 @@ function forward_model!(
                 swin,
                 NUS[spec];
                 kind="linear"
-                )
+            )
         end
 
 
         # Peform LSI correction if `high_options` are supplied.
        if !isnothing(high_options)
-                @info "(LSI correction)"
+            @info "(LSI correction)"
 
-                # Create the method
-                lsi = RE.LSIRTMethod(
-                    LSI_bounds[spec],
-                    buf.rt[swin],
-                    high_options
-                )
+            # Create the method
+            lsi = RE.LSIRTMethod(
+                LSI_bounds[spec],
+                buf.rt[swin],
+                high_options
+            )
 
-                # Run the binned RT calculations, and perform the correction itself.
-                t_lsi = @timed RE.perform_LSI_correction!(lsi)
-                @info @sprintf "LSI took %.1f seconds." t_lsi.time
+            # Run the binned RT calculations, and perform the correction itself.
+            t_lsi = @timed RE.perform_LSI_correction!(lsi)
+            @info @sprintf "LSI took %.1f seconds." t_lsi.time
         end
 
     end
@@ -254,12 +248,12 @@ function forward_model!(
 
                 # Apply ISRF
                 success = RE.apply_isrf_to_spectrum!(
-                        inst_buf, # Convolution buffer
-                        isrf[spec], # ISRF table
-                        dispersion[spec], # Dispersion
-                        hires,
-                        doppler_factor=doppler_factor
-                    )
+                    inst_buf, # Convolution buffer
+                    isrf[spec], # ISRF table
+                    dispersion[spec], # Dispersion
+                    hires,
+                    doppler_factor=doppler_factor
+                )
 
                 if !success
                     @warn "Application of ISRF on Jacobian $(sve) for $(swin) FAILED."
@@ -306,6 +300,7 @@ function forward_model!(
         )
 
         # Ingest jacobian into the right place
+        # (radiance unit conversion will be done later)
         rt_buf.jacobians[sve].I[rt_buf.indices[swin]] =
             inst_buf.low_res_output[disp.index]
 
@@ -329,7 +324,6 @@ function forward_model!(
     # Re-set the atmosphere to its prior state!
     RE.atmosphere_element_statevector_rollback!(buf.scene.atmosphere.atm_elements, SV)
     RE.atmosphere_statevector_rollback!(buf.scene.atmosphere, SV)
-
 
     return true
 
